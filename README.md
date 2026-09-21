@@ -1,6 +1,6 @@
 # nube-actividad
 
-Sistema de logs: batches de ~1 KB a S3, Lambda los convierte a CSV.
+Sistema de logs: batches de ~1 KB a S3, Lambda los guarda en DynamoDB.
 
 Corre todo desde **WSL**, con AWS CLI ya configurado.
 
@@ -10,18 +10,16 @@ chmod +x start_logging.sh scripts/*.sh
 ./scripts/split-log.sh
 ./scripts/create-s3-bucket.sh
 ./scripts/package-lambda.sh
-./start_logging.sh 30
+./start_logging.sh 60
 ```
 
-Ver CSV de salida:
+`60` son los segundos entre cada upload.
 
-```bash
-aws s3 ls s3://logging-$(aws sts get-caller-identity --query Account --output text)/output/
-```
+En la consola de AWS: DynamoDB → Explore items → tabla `logging-logs` → Query `pk = LabSZ`.
+Cada vez que repitas la query deben aparecer mas items.
 
-Al terminar, borra Lambda, bucket y archivos locales (`batches/`, `build/`):
+Al terminar:
 
 ```bash
 ./scripts/teardown.sh
 ```
-

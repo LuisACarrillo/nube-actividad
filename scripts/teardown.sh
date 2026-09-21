@@ -1,3 +1,4 @@
+# Borra Lambda, bucket, tabla DynamoDB y archivos locales.
 
 set -euo pipefail
 
@@ -6,6 +7,7 @@ REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || true)}"
 REGION="${REGION:-us-east-1}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 BUCKET="${BUCKET_NAME:-logging-$ACCOUNT_ID}"
+TABLE="${TABLE_NAME:-logging-logs}"
 FN="${LAMBDA_NAME:-log-processing}"
 
 aws s3api put-bucket-notification-configuration \
@@ -14,6 +16,7 @@ aws s3api put-bucket-notification-configuration \
 
 aws lambda delete-function --function-name "$FN" --region "$REGION" >/dev/null 2>&1 || true
 aws s3 rb "s3://$BUCKET" --force >/dev/null 2>&1 || true
+aws dynamodb delete-table --table-name "$TABLE" --region "$REGION" >/dev/null 2>&1 || true
 
 rm -rf "$ROOT/batches" "$ROOT/build"
 

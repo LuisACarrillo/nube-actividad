@@ -1,4 +1,4 @@
-# Empaqueta la Lambda y conecta el trigger S3 input/*.log -> output/*.csv
+# Empaqueta la Lambda y conecta el trigger S3 input/*.log -> DynamoDB.
 
 set -euo pipefail
 
@@ -7,6 +7,7 @@ REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || true)}"
 REGION="${REGION:-us-east-1}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 BUCKET="${BUCKET_NAME:-logging-$ACCOUNT_ID}"
+TABLE="${TABLE_NAME:-logging-logs}"
 FN="${LAMBDA_NAME:-log-processing}"
 ROLE="${LAMBDA_ROLE_NAME:-LabRole}"
 ZIP="$ROOT/build/lambda.zip"
@@ -26,6 +27,11 @@ PY
 
 if aws lambda get-function --function-name "$FN" --region "$REGION" >/dev/null 2>&1; then
   aws lambda update-function-code --function-name "$FN" --zip-file "fileb://$ZIP" --region "$REGION" >/dev/null
+  aws lambda wait function-updated --function-name "$FN" --region "$REGION"
+  aws lambda update-function-configuration \
+    --function-name "$FN" \
+    --environment "Variables={TABLE_NAME=$TABLE}" \
+    --region "$REGION" >/dev/null
 else
   aws lambda create-function \
     --function-name "$FN" \
@@ -34,6 +40,7 @@ else
     --handler lambda_function.lambda_handler \
     --zip-file "fileb://$ZIP" \
     --timeout 30 \
+    --environment "Variables={TABLE_NAME=$TABLE}" \
     --region "$REGION" >/dev/null
 fi
 
@@ -59,4 +66,4 @@ aws s3api put-bucket-notification-configuration --bucket "$BUCKET" --notificatio
   }]
 }"
 
-echo "Listo. $FN (rol $ROLE) <- s3://$BUCKET/input/*.log -> s3://$BUCKET/output/"
+echo "Listo. $FN <- s3://$BUCKET/input/*.log -> dynamodb $TABLE"

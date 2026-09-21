@@ -1,6 +1,4 @@
 
-import csv
-import io
 import os
 import re
 import urllib.parse
@@ -12,18 +10,21 @@ PATTERN = re.compile(
 )
 
 s3 = boto3.client("s3")
+table = boto3.resource("dynamodb").Table(os.environ.get("TABLE_NAME", "logging-logs"))
 
 
-def to_csv(text):
-    buf = io.StringIO()
-    writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(["timestamp", "hostname", "program", "pid", "log"])
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        match = PATTERN.match(line)
-        writer.writerow(list(match.groups()) if match else ["", "", "", "", line])
-    return buf.getvalue()
+def parse_line(line):
+    match = PATTERN.match(line)
+    if not match:
+        return None
+    timestamp, hostname, program, pid, message = match.groups()
+    return {
+        "timestamp": timestamp,
+        "hostname": hostname,
+        "program": program,
+        "pid": pid,
+        "log": message.rstrip(),
+    }
 
 
 def lambda_handler(event, context):
@@ -32,11 +33,18 @@ def lambda_handler(event, context):
         key = urllib.parse.unquote_plus(rec["s3"]["object"]["key"])
         if not key.endswith(".log"):
             continue
+
         body = s3.get_object(Bucket=bucket, Key=key)["Body"].read().decode("utf-8", "replace")
-        name = os.path.splitext(os.path.basename(key))[0]
-        s3.put_object(
-            Bucket=bucket,
-            Key=f"output/{name}.csv",
-            Body=to_csv(body),
-            ContentType="text/csv",
-        )
+        batch = os.path.splitext(os.path.basename(key))[0]
+
+        with table.batch_writer() as writer:
+            for i, line in enumerate(body.splitlines()):
+                if not line.strip():
+                    continue
+                item = parse_line(line)
+                if not item:
+                    continue
+                item["pk"] = item["hostname"]
+                item["sk"] = f"{batch}#{i:04d}"
+                item["batch"] = batch
+                writer.put_item(Item=item)
