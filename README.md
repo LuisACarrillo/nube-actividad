@@ -1,6 +1,9 @@
 # nube-actividad
 
-Sistema de logs: batches de ~1 KB a S3, Lambda los guarda en DynamoDB.
+Batches de ~1 KB a S3. Una Step Function parsea el batch, clasifica cada linea y la guarda en DynamoDB.
+
+- Sospechosa (`Invalid user` o `POSSIBLE BREAK-IN ATTEMPT`) → tabla `SecurityAlerts`
+- Normal → tabla `Logs`
 
 Corre todo desde **WSL**, con AWS CLI ya configurado.
 
@@ -15,8 +18,8 @@ chmod +x start_logging.sh scripts/*.sh
 
 `60` son los segundos entre cada upload.
 
-En la consola de AWS: DynamoDB → Explore items → tabla `logging-logs` → Query `pk = LabSZ`.
-Cada vez que repitas la query deben aparecer mas items.
+En la consola: DynamoDB → Explore items → Query `pk = LabSZ` en `Logs` y en `SecurityAlerts`.
+Repite la query: deben aparecer mas items.
 
 Al terminar:
 

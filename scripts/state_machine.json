@@ -1,0 +1,76 @@
+{
+  "Comment": "Parsea un batch, clasifica cada linea y la escribe en Logs o SecurityAlerts",
+  "StartAt": "ParseBatch",
+  "States": {
+    "ParseBatch": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:$AWS_REGION:$AWS_ACCOUNT:function:parse_batch",
+      "Next": "ProcessLines"
+    },
+    "ProcessLines": {
+      "Type": "Map",
+      "ItemsPath": "$.lines",
+      "MaxConcurrency": 5,
+      "Iterator": {
+        "StartAt": "ClassifyLine",
+        "States": {
+          "ClassifyLine": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:$AWS_REGION:$AWS_ACCOUNT:function:classify_line",
+            "Next": "RouteLine"
+          },
+          "RouteLine": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                "Variable": "$.suspicious",
+                "BooleanEquals": true,
+                "Next": "WriteAlert"
+              }
+            ],
+            "Default": "WriteLog"
+          },
+          "WriteAlert": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:$AWS_REGION:$AWS_ACCOUNT:function:write_alert",
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException",
+                  "Lambda.TooManyRequestsException",
+                  "States.TaskFailed"
+                ],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 4,
+                "BackoffRate": 2
+              }
+            ],
+            "End": true
+          },
+          "WriteLog": {
+            "Type": "Task",
+            "Resource": "arn:aws:lambda:$AWS_REGION:$AWS_ACCOUNT:function:write_log",
+            "Retry": [
+              {
+                "ErrorEquals": [
+                  "Lambda.ServiceException",
+                  "Lambda.AWSLambdaException",
+                  "Lambda.SdkClientException",
+                  "Lambda.TooManyRequestsException",
+                  "States.TaskFailed"
+                ],
+                "IntervalSeconds": 2,
+                "MaxAttempts": 4,
+                "BackoffRate": 2
+              }
+            ],
+            "End": true
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}
