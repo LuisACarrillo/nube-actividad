@@ -44,17 +44,28 @@ deploy parse_batch
 deploy classify_line
 deploy write_log
 deploy write_alert
+[[ -d "$ROOT/src/get_logs" ]] && deploy get_logs
+[[ -d "$ROOT/src/get_alerts" ]] && deploy get_alerts
 deploy start_workflow
 
 aws lambda update-function-configuration --function-name write_log \
   --environment "Variables={TABLE_NAME=Logs}" --region "$REGION" >/dev/null
 aws lambda update-function-configuration --function-name write_alert \
   --environment "Variables={TABLE_NAME=SecurityAlerts}" --region "$REGION" >/dev/null
+if [[ -d "$ROOT/src/get_logs" ]]; then
+  aws lambda update-function-configuration --function-name get_logs \
+    --environment "Variables={TABLE_NAME=Logs,INDEX_NAME=LogsByArrival}" --region "$REGION" >/dev/null
+fi
+if [[ -d "$ROOT/src/get_alerts" ]]; then
+  aws lambda update-function-configuration --function-name get_alerts \
+    --environment "Variables={TABLE_NAME=SecurityAlerts}" --region "$REGION" >/dev/null
+fi
 
 bash "$ROOT/scripts/create_state_machine.sh"
 
 aws lambda update-function-configuration --function-name start_workflow \
   --environment "Variables={STATE_MACHINE_ARN=${SM_ARN}}" --region "$REGION" >/dev/null
+aws lambda wait function-updated --function-name start_workflow --region "$REGION"
 
 aws lambda add-permission \
   --function-name start_workflow \
@@ -62,20 +73,28 @@ aws lambda add-permission \
   --action lambda:InvokeFunction \
   --principal s3.amazonaws.com \
   --source-arn "arn:aws:s3:::${BUCKET}" \
-  --source-account "$ACCOUNT_ID" \
   --region "$REGION" >/dev/null 2>&1 || true
 
 START_ARN="$(aws lambda get-function --function-name start_workflow --region "$REGION" --query 'Configuration.FunctionArn' --output text)"
-aws s3api put-bucket-notification-configuration --bucket "$BUCKET" --notification-configuration "{
-  \"LambdaFunctionConfigurations\": [{
-    \"Id\": \"StartLogWorkflow\",
-    \"LambdaFunctionArn\": \"${START_ARN}\",
-    \"Events\": [\"s3:ObjectCreated:*\"],
-    \"Filter\": {\"Key\": {\"FilterRules\": [
-      {\"Name\":\"prefix\",\"Value\":\"input/\"},
-      {\"Name\":\"suffix\",\"Value\":\".log\"}
-    ]}}
-  }]
-}"
+NOTIF="$ROOT/build/s3-notification.json"
+python3 - "$NOTIF" "$START_ARN" <<'PY'
+import json, sys
+from pathlib import Path
+Path(sys.argv[1]).write_text(json.dumps({
+    "LambdaFunctionConfigurations": [{
+        "Id": "StartLogWorkflow",
+        "LambdaFunctionArn": sys.argv[2],
+        "Events": ["s3:ObjectCreated:*"],
+        "Filter": {"Key": {"FilterRules": [
+            {"Name": "prefix", "Value": "input/"},
+            {"Name": "suffix", "Value": ".log"},
+        ]}},
+    }]
+}), encoding="utf-8")
+PY
+aws s3api put-bucket-notification-configuration \
+  --bucket "$BUCKET" \
+  --notification-configuration "file://${NOTIF}"
+aws s3api get-bucket-notification-configuration --bucket "$BUCKET"
 
 echo "Listo. s3://${BUCKET}/input/*.log -> LogProcessing -> Logs | SecurityAlerts"

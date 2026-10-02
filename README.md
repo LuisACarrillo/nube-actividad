@@ -21,6 +21,11 @@ chmod +x start_logging.sh scripts/*.sh
 En la consola: DynamoDB → Explore items → Query `pk = LabSZ` en `Logs` y en `SecurityAlerts`.
 Repite la query: deben aparecer mas items.
 
+## Lambdas de consulta
+
+- `get_alerts` escanea `SecurityAlerts` y devuelve `alerts`, cada uno con `id`, `timestamp`, `host`, `log` y `severity`. Sigue las paginas de DynamoDB para incluir todas las alertas.
+- `get_logs` consulta `LogsByArrival` con `gsi_pk = LOG`, `Limit = N` y `ScanIndexForward = false`. Invocala con un evento como `{"N": 10}`; devuelve los resultados en `logs`, del mas reciente al mas antiguo.
+
 Al terminar:
 
 ```bash
