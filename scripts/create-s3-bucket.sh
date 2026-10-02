@@ -1,7 +1,8 @@
-# Crea el bucket S3 (input/) y las tablas Logs y SecurityAlerts.
+# Crea el bucket S3 y las tablas Logs (con GSI) y SecurityAlerts.
 
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REGION="${AWS_REGION:-$(aws configure get region 2>/dev/null || true)}"
 REGION="${REGION:-us-east-1}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
@@ -23,12 +24,18 @@ ensure_table() {
   echo "Tabla creada: $name"
 }
 
+if aws dynamodb describe-table --table-name Logs --region "$REGION" >/dev/null 2>&1; then
+  echo "La tabla Logs ya existe."
+else
+  aws dynamodb create-table \
+    --cli-input-json "file://${ROOT}/scripts/logs-table.json" \
+    --region "$REGION" >/dev/null
+  aws dynamodb wait table-exists --table-name Logs --region "$REGION"
+  echo "Tabla creada: Logs"
+fi
+
 aws s3 mb "s3://$BUCKET" --region "$REGION" 2>/dev/null || true
 aws s3api put-object --bucket "$BUCKET" --key "input/" >/dev/null
-
-ensure_table Logs
 ensure_table SecurityAlerts
 
-echo "Listo."
-echo "  s3://$BUCKET/input/"
-echo "  dynamodb: Logs, SecurityAlerts"
+echo "Listo. s3://$BUCKET/input/  Logs + SecurityAlerts"

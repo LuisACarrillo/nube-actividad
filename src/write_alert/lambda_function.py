@@ -12,11 +12,12 @@ def lambda_handler(event, context):
         Item={
             "pk": event["pk"],
             "sk": event["sk"],
+            "id": event.get("id") or event["sk"],
             "timestamp": event.get("timestamp", ""),
-            "hostname": event.get("hostname", ""),
-            "program": event.get("program", ""),
-            "pid": event.get("pid", ""),
+            "host": event.get("host") or event.get("hostname", ""),
             "log": event.get("log", ""),
+            "severity": event.get("severity", "high"),
+            "LastModified": event.get("LastModified", ""),
             "batch": event.get("batch", ""),
         }
     )
