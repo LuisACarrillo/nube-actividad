@@ -60,3 +60,4 @@ done
 
 rm -rf "$ROOT/batches" "$ROOT/build"
 echo "Teardown listo."
+"$(dirname "$0")/delete-api.sh"
